@@ -44,6 +44,18 @@ def rag_localdoc_q_with_ctx(sc:Sirochatora):
     print(rez)
     return rez
 
+def ask_zero_cot(sc: Sirochatora):
+    rez = sc.query_with_zeroshot_CoT("""クイズだよ
+    1. ねことたこが輪になった 
+    2. 輪になると光る
+    ねことたこはどーなるでしょーか？
+""", False)
+    print(rez)
+
+def ask_negpos(sc: Sirochatora):
+    rez = sc.query_with_negpos_resp("桃太郎が鬼が島に鬼退治に行った結果はどうなるでしょうか?", False)
+    print(rez)
+
 def main():
 
     conf:ConfJsonLoader = ConfJsonLoader("sirochatora/conf.json")
@@ -52,7 +64,9 @@ def main():
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
     sc:Sirochatora = Sirochatora(temperature=0)
-    rez = rag_localdoc_q_with_ctx(sc)
+    #rez = rag_localdoc_q_with_ctx(sc)
+    #ask_zero_cot(sc)
+    ask_negpos(sc)
     
     #simple_template(sc)
 
