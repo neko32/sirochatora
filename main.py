@@ -60,6 +60,10 @@ def rag_web(sc: Sirochatora):
     rag = TavilyRAG("NA", "NA")
     print(rag.query_with_rag("TAVILY_Q", "ニューヨークの今日の天気は？", sc))
 
+def chat_sample(sc: Sirochatora):
+    print(sc.query("ぼくのなまえはさのまるで栃木県佐野市のゆるキャラをやってます"))    
+    print(sc.query("ねこちゃんはさのまるに会ったんだね。さのまるってどこのゆるキャラだったかなぁ？"))
+
 def main():
 
     conf:ConfJsonLoader = ConfJsonLoader("sirochatora/conf.json")
@@ -67,9 +71,10 @@ def main():
     environ["LANGCHAIN_PROJECT"] = conf._conf["LANGCHAIN_PROJECT"]
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
-    sc:Sirochatora = Sirochatora(temperature=0)
+    sc:Sirochatora = Sirochatora(temperature=0.3, is_chat_mode=True)
+    chat_sample(sc)
     #rez = rag_localdoc_q_with_ctx(sc)
-    rag_localdoc_simple()
+    #rag_localdoc_simple()
     #ask_zero_cot(sc)
     #ask_negpos(sc)
     #rag_web(sc)

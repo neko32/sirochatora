@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_community.chat_message_histories import SQLChatMessageHistory
 
 from langchain_openai import ChatOpenAI
 
@@ -10,10 +11,17 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import SecretStr
 
 from libs.sirochatora.util.siroutil import from_system_message_to_tuple
+from typing import Optional
+from uuid import uuid4
+from os import getenv
 
 class Sirochatora:
 
-    def __init__(self, model_name:str = "gemma3:4b", temperature:float = 0.1):
+    def __init__(self, 
+                model_name:str = "gemma3:4b", 
+                temperature:float = 0.1,
+                is_chat_mode:bool = False,
+                session_id:Optional[str] = None):
         self._model_name:str = model_name
         self._temperature = temperature
         self._system_msgs:list[SystemMessage] = [
@@ -25,7 +33,26 @@ class Sirochatora:
             temperature = self._temperature,
             base_url = 'http://localhost:11434/v1'
         )
+        self._is_chat_mode = is_chat_mode
+        if is_chat_mode:
+            db_path = getenv("NEKOKAN_INDB_PATH")
+            if session_id is None:
+                session_id = uuid4().hex
+            self._msg_history = SQLChatMessageHistory(
+                session_id = session_id, 
+                connection = f"sqlite:///{db_path}/sirochatora_chatv1.db")
+        self._session_id = session_id
 
+    def change_session_id(self, new_session_id:Optional[str] = None) -> None:
+        if not self._is_chat_mode:
+            raise RuntimeError("chat mode must be ON")
+        if new_session_id is None:
+            new_session_id = uuid4().hex
+        self._session_id = new_session_id
+        db_path = getenv("NEKOKAN_INDB_PATH")
+        self._msg_history = SQLChatMessageHistory(
+            session_id = self._session_id, 
+            connection = f"sqlite:///{db_path}/sirochatora_chatv1.db")
 
     def clear_system(self) -> None:
         self._system_msgs.clear()
@@ -42,13 +69,26 @@ class Sirochatora:
         self._system_msgs.append(SystemMessage(sys_msg))
 
     def query(self, q:str) -> str:
-        messages = self._system_msgs + [HumanMessage(q)]
-        ai_resp = self._llm.invoke(messages)
-        content = ai_resp.content
-        if isinstance(content, str):
-            return content
+        prompt = ChatPromptTemplate.from_messages([
+            from_system_message_to_tuple(self._system_msgs[-1]),
+            ("human", q)
+        ])
+        chain = prompt | self._llm | StrOutputParser()
+        if self._is_chat_mode:
+            messages_from_hist = self._msg_history.get_messages()
+            resp = chain.invoke({
+                "chat_history": messages_from_hist,
+                "question": q
+            })
+            self._msg_history.add_user_message(q)
+            self._msg_history.add_ai_message(resp)
+            print(f"@query:session_id - {self._session_id}")
+            return resp
         else:
-            raise RuntimeError("return value must be str type here")
+            return chain.invoke({
+                "question": q
+            })
+        
 
     def query_with_template(self, q:str, vals:dict[str, str]) -> str:
         
