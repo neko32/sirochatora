@@ -19,3 +19,11 @@ def from_system_message_to_tuple(sys_msg:SystemMessage) -> tuple[str, str]:
         )
     else:
         raise RuntimeError("SystemMessage Content is not str type")
+
+def ctxdict_to_str(ctx:dict[int, str]) -> str:
+    keys:list[int] = sorted(list(ctx.keys()))
+    buf:str = ""
+    for key in keys:
+        buf += f"[{key}]: {ctx[key]}\n\n"
+    return buf
+    

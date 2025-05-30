@@ -1,6 +1,6 @@
 from libs.sirochatora.sirochatora import Sirochatora
-from libs.sirochatora.rag.rag import LocalStorageRAG
-from libs.sirochatora.util.siroutil import ConfJsonLoader
+from libs.sirochatora.rag.rag import LocalStorageRAG, TavilyRAG
+from libs.sirochatora.util.siroutil import ConfJsonLoader, ctxdict_to_str
 from os import environ
 
 
@@ -24,8 +24,8 @@ def rag_localdoc_simple():
     lc.fetch(task_name)
     lc.transform(task_name)
     lc.embed(task_name, "さのまるについてですが")
-    rez = lc.query_with_rag(task_name, "さのまるとトゲトゲダイヤモンド鉄球について聞きたい。")
-    print(rez)
+    rez = lc.get_data_for_ctx(task_name, "さのまるとトゲトゲダイヤモンド鉄球について聞きたい。")
+    print(ctxdict_to_str(rez))
     return rez
     
 def rag_localdoc_q_with_ctx(sc:Sirochatora):
@@ -56,6 +56,10 @@ def ask_negpos(sc: Sirochatora):
     rez = sc.query_with_negpos_resp("桃太郎が鬼が島に鬼退治に行った結果はどうなるでしょうか?", False)
     print(rez)
 
+def rag_web(sc: Sirochatora):
+    rag = TavilyRAG("NA", "NA")
+    print(rag.query_with_rag("TAVILY_Q", "ニューヨークの今日の天気は？", sc))
+
 def main():
 
     conf:ConfJsonLoader = ConfJsonLoader("sirochatora/conf.json")
@@ -65,8 +69,10 @@ def main():
     #sc:Sirochatora = Sirochatora(temperature=1.)
     sc:Sirochatora = Sirochatora(temperature=0)
     #rez = rag_localdoc_q_with_ctx(sc)
+    rag_localdoc_simple()
     #ask_zero_cot(sc)
-    ask_negpos(sc)
+    #ask_negpos(sc)
+    #rag_web(sc)
     
     #simple_template(sc)
 

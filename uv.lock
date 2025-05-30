@@ -2314,6 +2314,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langchain-text-splitters" },
     { name = "loguru" },
+    { name = "tavily-python" },
     { name = "unstructured" },
 ]
 
@@ -2329,6 +2330,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=0.3.18" },
     { name = "langchain-text-splitters", specifier = ">=0.3.8" },
     { name = "loguru", specifier = ">=0.7.3" },
+    { name = "tavily-python", specifier = ">=0.7.3" },
     { name = "unstructured", specifier = ">=0.17.2" },
 ]
 
@@ -2424,6 +2426,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
+]
+
+[[package]]
+name = "tavily-python"
+version = "0.7.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "requests" },
+    { name = "tiktoken" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a7/ee/8a451c724d814d97c1fda8c6203bc9563c7fe104e7c0214f83574326525e/tavily_python-0.7.3.tar.gz", hash = "sha256:f091be8bfed28ab42ff239cf2c46f2ab3715071bf19951900157b3e4a60151c4", size = 16657, upload-time = "2025-05-25T15:15:29.017Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/82/0beda7ea25f1f586b1ae55b1b5399f999171ab12f87db1159fa6f00c2641/tavily_python-0.7.3-py3-none-any.whl", hash = "sha256:ed92e49e5be75a790ff7e36571bdb2982f179b34ca19f91d764ac7368219a8e5", size = 15022, upload-time = "2025-05-25T15:15:26.61Z" },
 ]
 
 [[package]]
