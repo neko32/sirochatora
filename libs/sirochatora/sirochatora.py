@@ -8,12 +8,15 @@ from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_openai import ChatOpenAI
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from pydantic import SecretStr
+from pydantic import SecretStr, BaseModel, Field
 
 from libs.sirochatora.util.siroutil import from_system_message_to_tuple
 from typing import Optional
 from uuid import uuid4
 from os import getenv
+
+class QueryGenOutput(BaseModel):
+    queries:list[str] = Field(...)
 
 class Sirochatora:
 
@@ -122,6 +125,68 @@ class Sirochatora:
             | StrOutputParser()
         )
         return chain.invoke(q)
+
+    # HYpothetical Document Embedding
+    def query_with_hyde(self, q:str, retriever: VectorStoreRetriever) -> str:
+
+        str_parser = StrOutputParser()
+        hyde_prompt = ChatPromptTemplate.from_template("""\
+            次の質問に解答する一文を書いてください。
+
+            質問: {question}
+        """)
+        hyde_chain = hyde_prompt | self._llm | str_parser
+
+        prompt = ChatPromptTemplate.from_template('''\
+            以下の文脈だけを踏まえて質問に解答してください。
+
+            文脈:"""
+            {context}
+            """
+
+            質問:"""
+            {question}
+            """
+        ''')
+
+        hyde_rag_chain = {
+            "question": RunnablePassthrough(),
+            "context": hyde_chain | retriever
+        } | prompt | self._llm | str_parser
+
+        return hyde_rag_chain.invoke(q)
+
+    def query_with_multiqueries(self, q:str, retriever:VectorStoreRetriever) -> str:
+        multi_query_gen_prompt = ChatPromptTemplate.from_template("""\
+        質問に対してベクターデータベースから関連文書を検索するため３つの異なる検索クエリを生成してください。
+        距離ベースの類似性検索の限界を克服するためユーザーの質問に対して複数の視点を提供するのが目的です。
+
+        質問: {question}
+        """)
+
+        multi_query_gen_chain = (multi_query_gen_prompt 
+        | self._llm.with_structured_output(QueryGenOutput)
+        | (lambda x: x.queries))
+
+        prompt = ChatPromptTemplate.from_template('''\
+            以下の文脈だけを踏まえて質問に解答してください。
+
+            文脈:"""
+            {context}
+            """
+
+            質問:"""
+            {question}
+            """
+        ''')
+
+        multi_query_rag_chain = {
+            "question": RunnablePassthrough(),
+            "context": multi_query_gen_chain | retriever.map()
+        } | prompt | self._llm | StrOutputParser()
+
+        return multi_query_rag_chain.invoke(q)
+
 
     def query_with_zeroshot_CoT(self, q:str, override_system:bool = True) -> str:
 

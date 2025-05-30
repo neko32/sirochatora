@@ -64,6 +64,38 @@ def chat_sample(sc: Sirochatora):
     print(sc.query("ぼくのなまえはさのまるで栃木県佐野市のゆるキャラをやってます"))    
     print(sc.query("ねこちゃんはさのまるに会ったんだね。さのまるってどこのゆるキャラだったかなぁ？"))
 
+def rag_hyde(sc: Sirochatora):
+    lc:LocalStorageRAG = LocalStorageRAG(
+        "/mnt/d/dataset_for_ml/sanomaru",
+        "txt"
+    )
+    task_name:str = "neko try"
+    lc.fetch(task_name)
+    lc.transform(task_name)
+    lc.embed(task_name, "さのまるの手がトゲトゲダイヤモンド鉄球になった件について聞きたい。")
+    rez = sc.query_with_hyde(
+        "さのまるはダイヤモンド化して何をしてしまったの？ 起こったことを時系列に５つ教えて",
+        lc.get_retriever(task_name)
+    )
+    print(rez)
+    return rez
+
+def rag_multiqueries(sc: Sirochatora):
+    lc:LocalStorageRAG = LocalStorageRAG(
+        "/mnt/d/dataset_for_ml/sanomaru",
+        "txt"
+    )
+    task_name:str = "neko try"
+    lc.fetch(task_name)
+    lc.transform(task_name)
+    lc.embed(task_name, "さのまるの手がトゲトゲダイヤモンド鉄球になった件について聞きたい。")
+    rez = sc.query_with_multiqueries(
+        "さのまるはダイヤモンド化して何をしてしまったの？ 起こったことを時系列に５つ教えて",
+        lc.get_retriever(task_name)
+    )
+    print(rez)
+    return rez
+
 def main():
 
     conf:ConfJsonLoader = ConfJsonLoader("sirochatora/conf.json")
@@ -71,8 +103,10 @@ def main():
     environ["LANGCHAIN_PROJECT"] = conf._conf["LANGCHAIN_PROJECT"]
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
-    sc:Sirochatora = Sirochatora(temperature=0.3, is_chat_mode=True)
-    chat_sample(sc)
+    sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
+    rag_multiqueries(sc)
+    #rag_hyde(sc)
+    #chat_sample(sc)
     #rez = rag_localdoc_q_with_ctx(sc)
     #rag_localdoc_simple()
     #ask_zero_cot(sc)
