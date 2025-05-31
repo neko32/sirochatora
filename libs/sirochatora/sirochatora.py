@@ -1,5 +1,6 @@
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStoreRetriever
@@ -156,6 +157,23 @@ class Sirochatora:
 
         return hyde_rag_chain.invoke(q)
 
+    def reciprocal_rank_fusion(self, 
+                            retriever_outs: list[list[Document]],
+                            k:int = 60,
+                            top_n:int = 3)  -> list[str]:
+        content_scores = {}
+        for docs in retriever_outs:
+            for rank, doc in enumerate(docs):
+                content = doc.page_content
+
+                if content not in content_scores:
+                    content_scores[content] = 0
+                content_scores[content] += 1 / (rank + k)
+        
+        rank_sorted = sorted(content_scores.items(), key = lambda x:x[1], reverse = True)
+        return [content for content, _ in rank_sorted][:top_n]
+
+
     def query_with_multiqueries(self, q:str, retriever:VectorStoreRetriever) -> str:
         multi_query_gen_prompt = ChatPromptTemplate.from_template("""\
         質問に対してベクターデータベースから関連文書を検索するため３つの異なる検索クエリを生成してください。
@@ -182,7 +200,7 @@ class Sirochatora:
 
         multi_query_rag_chain = {
             "question": RunnablePassthrough(),
-            "context": multi_query_gen_chain | retriever.map()
+            "context": multi_query_gen_chain | retriever.map() | self.reciprocal_rank_fusion
         } | prompt | self._llm | StrOutputParser()
 
         return multi_query_rag_chain.invoke(q)
