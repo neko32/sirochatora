@@ -96,6 +96,22 @@ def rag_multiqueries(sc: Sirochatora):
     print(rez)
     return rez
 
+def rag_rerank(sc: Sirochatora):
+    lc:LocalStorageRAG = LocalStorageRAG(
+        "/mnt/d/dataset_for_ml/sanomaru",
+        "txt"
+    )
+    task_name:str = "neko try"
+    lc.fetch(task_name)
+    lc.transform(task_name)
+    lc.embed(task_name, "さのまるの手がトゲトゲダイヤモンド鉄球になった件について聞きたい。")
+    rez = sc.query_with_rerank(
+        "さのまるはダイヤモンド化して何をしてしまったの？ 起こったことを時系列に５つ教えて",
+        lc.get_retriever(task_name)
+    )
+    print(rez)
+    return rez
+
 def main():
 
     conf:ConfJsonLoader = ConfJsonLoader("sirochatora/conf.json")
@@ -104,7 +120,8 @@ def main():
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
     sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
-    rag_multiqueries(sc)
+    rag_rerank(sc)
+    #rag_multiqueries(sc)
     #rag_hyde(sc)
     #chat_sample(sc)
     #rez = rag_localdoc_q_with_ctx(sc)

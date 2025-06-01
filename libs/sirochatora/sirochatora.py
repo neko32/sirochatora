@@ -5,6 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_community.chat_message_histories import SQLChatMessageHistory
+from langchain_cohere import CohereRerank
 
 from langchain_openai import ChatOpenAI
 
@@ -12,7 +13,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import SecretStr, BaseModel, Field
 
 from libs.sirochatora.util.siroutil import from_system_message_to_tuple
-from typing import Optional
+from typing import Optional, Any
 from uuid import uuid4
 from os import getenv
 
@@ -171,8 +172,39 @@ class Sirochatora:
                 content_scores[content] += 1 / (rank + k)
         
         rank_sorted = sorted(content_scores.items(), key = lambda x:x[1], reverse = True)
-        return [content for content, _ in rank_sorted][:top_n]
+        if top_n != -1:
+            return [content for content, _ in rank_sorted][:top_n]
+        else:
+            return [content for content, _ in rank_sorted]
 
+
+    def _rerank(self, d: dict[str, Any], top_n:int = 3) -> list[Document]:
+        q = d["question"]
+        documents = d["documents"]
+
+        compressor = CohereRerank(model = "rerank-multilingual-v3.0", top_n = top_n)
+        return list(compressor.compress_documents(documents = documents, query = q))
+
+    def query_with_rerank(self, q:str, retriever:VectorStoreRetriever) -> str:
+
+        prompt = ChatPromptTemplate.from_template('''\
+            以下の文脈だけを踏まえて質問に解答してください。
+
+            文脈:"""
+            {context}
+            """
+
+            質問:"""
+            {question}
+            """
+        ''')
+
+        rerank_chain = {
+            "question": RunnablePassthrough(),
+            "documents": retriever
+        } | RunnablePassthrough.assign(context = self._rerank) | prompt | self._llm | StrOutputParser()
+
+        return rerank_chain.invoke(q)
 
     def query_with_multiqueries(self, q:str, retriever:VectorStoreRetriever) -> str:
         multi_query_gen_prompt = ChatPromptTemplate.from_template("""\
