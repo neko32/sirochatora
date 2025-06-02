@@ -5,12 +5,13 @@ from enum import Enum, auto
 from langchain_core.embeddings import Embeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.runnables import RunnablePassthrough
+from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_core.documents import Document, BaseDocumentTransformer
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.document_loaders.base import BaseLoader
-from langchain_community.retrievers import TavilySearchAPIRetriever
+from langchain_community.retrievers import TavilySearchAPIRetriever, BM25Retriever
 from langchain_community.document_loaders import GitLoader, DirectoryLoader
 
 from langchain_text_splitters import CharacterTextSplitter
@@ -29,6 +30,9 @@ class PostfixFileFilter(Filter):
     def filter(self, data:str, filt_cond:str) -> bool:
         return data.endswith(filt_cond)
 
+class RetrievalType(str, Enum):
+    CHROMA = "chroma"
+    BM25 = "bm25"
 
 class Phase(Enum):
     INIT = auto()
@@ -153,17 +157,21 @@ class LocalStorageRAG(RAGFeature):
     def query_with_rag(self, task_name:str, query:str, sc:Sirochatora | None) -> str:
         raise NotImplementedError()
 
-    def get_retriever(self, task_name:str) -> VectorStoreRetriever:
+    def get_retriever(self, task_name:str, retriver_type:RetrievalType = RetrievalType.CHROMA) -> BaseRetriever:
 
         if self._task[task_name][0] != Phase.READY_FOR_CTX:
             raise RuntimeError("Chroma vsotre is not ready yet")
 
-        db_candidate = self._task[task_name][1]
-        if isinstance(db_candidate, Chroma):
-            db: Chroma = db_candidate
-            return db.as_retriever()
-        else:
-            raise RuntimeError("Chroma vstore is not properly set")
+        if retriver_type == RetrievalType.CHROMA:
+            db_candidate = self._task[task_name][1]
+            if isinstance(db_candidate, Chroma):
+                db: Chroma = db_candidate
+                return db.as_retriever()
+            else:
+                raise RuntimeError("Chroma vstore is not properly set")
+        
+        elif retriver_type == RetrievalType.BM25:
+            return BM25Retriever.from_documents(self._docs[task_name])
 
 class TavilyRAG(RAGFeature):
     def __init__(self, 
@@ -182,6 +190,86 @@ class TavilyRAG(RAGFeature):
     
     def fetch(self, task_name:str) -> None:
         pass
+
+    def transform(self, task_name:str) -> None:
+        pass
+
+    def embed(self, task_name:str, query:str) -> None:
+        pass
+
+    def get_data_for_ctx(self, task_name:str, query:str) -> dict[int, str]:
+        raise NotImplementedError()
+
+    def query_with_rag(self, task_name:str, query:str, sc:Sirochatora | None) -> str:
+
+        if sc is not None and hasattr(sc, "_llm") and sc._llm:
+            llm = sc._llm
+        else:
+            raise RuntimeError("LLM not found")
+
+        self._task[task_name] = (Phase.DATA_RETRIEVING_FROM_SRC, None)
+        msg_from_human = '''\
+        以下のコンテキストだけを踏まえて質問に解答して下さい。
+
+        コンテキスト:"""
+        {context}
+        """
+
+        質問: {question}
+        '''
+
+        system_msg = None
+        if sc is not None and hasattr(sc, "_system_msgs") and sc._system_msgs:
+            system_msg = from_system_message_to_tuple(sc._system_msgs[-1])
+        else:
+            system_msg = ("system", "賢いねこちゃんとして答えてね")
+
+        prompt = ChatPromptTemplate.from_messages([
+            system_msg,
+            ("human", msg_from_human)
+        ])
+        retriever = TavilySearchAPIRetriever(k = 3)
+
+        chain = (
+            {"context": retriever, "question": RunnablePassthrough()}
+            | prompt
+            | llm
+            | StrOutputParser()
+        )
+
+#        return chain.invoke({"question": query})
+        return chain.invoke(query)
+
+class GithubRAG(RAGFeature):
+
+    def __init__(self, 
+                src: str,
+                filter_cond: str,
+                split_chunk_size: int = 1000,
+                split_chunk_overlap: int = 150,
+                embedding_model_name: str = "multilingual-e5-base"
+                ):
+        super().__init__(src, filter_cond, split_chunk_size, split_chunk_overlap, embedding_model_name)
+        self._task:dict[str, tuple[Phase, Chroma | None]] = {}
+        self._docs:dict[str, list[Document]] = {}
+        self._branch_name = "main"
+
+    def set_branch_name(self, branch_name:str) -> None:
+        self._branch_name = branch_name
+
+    def run(self, task_name:str) -> None:
+        pass
+    
+    def fetch(self, task_name:str) -> None:
+        self._task[task_name] = (Phase.DATA_RETRIEVING_FROM_SRC, None)
+        self._task[task_name] = (Phase.DATA_RETRIEVING_FROM_SRC, None)
+        loader = GitLoader(clone_url = self._src, repo_path = "/tmp/langchain", 
+                        file_filter = lambda x:x.endswith(self._filter_cond),
+                        branch = self._branch_name)
+        self._loader = loader
+        self._docs[task_name] = loader.load()
+        print(f"task[{task_name}]@fetch: data retriving done successfully.")
+        print(f"task[{task_name}]@fetch: retrieved doc number is {len(self._docs[task_name])}")
 
     def transform(self, task_name:str) -> None:
         pass

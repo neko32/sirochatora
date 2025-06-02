@@ -1,5 +1,5 @@
 from libs.sirochatora.sirochatora import Sirochatora
-from libs.sirochatora.rag.rag import LocalStorageRAG, TavilyRAG
+from libs.sirochatora.rag.rag import LocalStorageRAG, TavilyRAG, RetrievalType, GithubRAG
 from libs.sirochatora.util.siroutil import ConfJsonLoader, ctxdict_to_str
 from os import environ
 
@@ -96,6 +96,24 @@ def rag_multiqueries(sc: Sirochatora):
     print(rez)
     return rez
 
+def rag_bm25(sc: Sirochatora):
+
+    lc:LocalStorageRAG = LocalStorageRAG(
+        "/mnt/d/dataset_for_ml/sanomaru",
+        "txt"
+    )
+    task_name:str = "neko try"
+    lc.fetch(task_name)
+    lc.transform(task_name)
+    lc.embed(task_name, "さのまるの手がトゲトゲダイヤモンド鉄球になった件について聞きたい。")
+    retv = lc.get_retriever(task_name, RetrievalType.BM25)
+    rez = sc.query_with_retriever(
+        "さのまるはダイヤモンド化して何をしてしまったの？ 起こったことを時系列に５つ教えて",
+        retv
+    )
+    print(rez)
+    return rez
+
 def rag_rerank(sc: Sirochatora):
     lc:LocalStorageRAG = LocalStorageRAG(
         "/mnt/d/dataset_for_ml/sanomaru",
@@ -112,6 +130,45 @@ def rag_rerank(sc: Sirochatora):
     print(rez)
     return rez
 
+def rag_rerank_bm25(sc: Sirochatora):
+    lc:LocalStorageRAG = LocalStorageRAG(
+        "/mnt/d/dataset_for_ml/sanomaru",
+        "txt"
+    )
+    task_name:str = "neko try"
+    lc.fetch(task_name)
+    lc.transform(task_name)
+    lc.embed(task_name, "さのまるの手がトゲトゲダイヤモンド鉄球になった件について聞きたい。")
+    rez = sc.query_with_rerank(
+        "さのまるはダイヤモンド化して何をしてしまったの？ 起こったことを時系列に５つ教えて",
+        lc.get_retriever(task_name, RetrievalType.BM25)
+    )
+    print(rez)
+    return rez
+
+def rag_rerank_hybrid(sc: Sirochatora):
+    lc:LocalStorageRAG = LocalStorageRAG(
+        "/mnt/d/dataset_for_ml/sanomaru",
+        "txt", split_chunk_size=1000, split_chunk_overlap=150
+    )
+    task_name:str = "nekohybrid"
+    lc.fetch(task_name)
+    lc.transform(task_name)
+    lc.embed(task_name, "さのまるの手がトゲトゲダイヤモンド鉄球になった件について聞きたい。")
+    rez = sc.query_with_rerank_vm_sim_hybrid(
+        "さのまるはダイヤモンド化して何をしてしまったの？ 起こったことを時系列に５つ教えて",
+        lc.get_retriever(task_name, RetrievalType.CHROMA),
+        lc.get_retriever(task_name, RetrievalType.BM25)
+    )
+    print(rez)
+    return rez
+
+def git_rag(sc:Sirochatora):
+    task_name = "nekogit_langchain_sample"
+    gitlag = GithubRAG(src = "https://github.com/langchain-ai/langchain", filter_cond = ".mdx")
+    gitlag.set_branch_name("master")
+    gitlag.fetch(task_name)
+
 def main():
 
     conf:ConfJsonLoader = ConfJsonLoader("sirochatora/conf.json")
@@ -120,7 +177,11 @@ def main():
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
     sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
-    rag_rerank(sc)
+    #rag_rerank(sc)
+    #rag_bm25(sc)
+    #rag_rerank_bm25(sc)
+    #rag_rerank_hybrid(sc)
+    git_rag(sc)
     #rag_multiqueries(sc)
     #rag_hyde(sc)
     #chat_sample(sc)

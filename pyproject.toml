@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "chromadb>=1.0.10",
     "gitpython>=3.1.44",
     "langchain>=0.3.25",
     "langchain-chroma>=0.2.4",
@@ -16,6 +17,9 @@ dependencies = [
     "langchain-openai>=0.3.18",
     "langchain-text-splitters>=0.3.8",
     "loguru>=0.7.3",
+    "nest-asyncio>=1.6.0",
+    "ragas>=0.2.15",
+    "rank-bm25>=0.2.2",
     "tavily-python>=0.7.3",
     "unstructured>=0.17.2",
 ]

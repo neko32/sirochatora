@@ -3,8 +3,10 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_community.chat_message_histories import SQLChatMessageHistory
+from langchain_community.retrievers import BM25Retriever
 from langchain_cohere import CohereRerank
 
 from langchain_openai import ChatOpenAI
@@ -106,7 +108,7 @@ class Sirochatora:
         chain = prompt_template | self._llm | StrOutputParser()
         return chain.invoke(vals)
 
-    def query_within_context(self, q:str, retriever: VectorStoreRetriever) -> str:
+    def query_within_context(self, q:str, retriever: BaseRetriever) -> str:
 
         prompt = ChatPromptTemplate.from_template('''\
             以下の文脈だけを踏まえて質問に解答してください。
@@ -128,8 +130,30 @@ class Sirochatora:
         )
         return chain.invoke(q)
 
+    def query_with_retriever(self, q:str, retriever: BaseRetriever) -> str:
+
+        prompt = ChatPromptTemplate.from_template('''\
+            以下の文脈だけを踏まえて質問に解答してください。
+
+            文脈:"""
+            {context}
+            """
+
+            質問:"""
+            {question}
+            """
+        ''')
+
+        chain = {
+            "question": RunnablePassthrough(),
+            "context": retriever
+        } | prompt | self._llm | StrOutputParser()
+
+        return chain.invoke(q)
+
+
     # HYpothetical Document Embedding
-    def query_with_hyde(self, q:str, retriever: VectorStoreRetriever) -> str:
+    def query_with_hyde(self, q:str, retriever: BaseRetriever) -> str:
 
         str_parser = StrOutputParser()
         hyde_prompt = ChatPromptTemplate.from_template("""\
@@ -185,7 +209,7 @@ class Sirochatora:
         compressor = CohereRerank(model = "rerank-multilingual-v3.0", top_n = top_n)
         return list(compressor.compress_documents(documents = documents, query = q))
 
-    def query_with_rerank(self, q:str, retriever:VectorStoreRetriever) -> str:
+    def query_with_rerank(self, q:str, retriever:BaseRetriever) -> str:
 
         prompt = ChatPromptTemplate.from_template('''\
             以下の文脈だけを踏まえて質問に解答してください。
@@ -206,7 +230,43 @@ class Sirochatora:
 
         return rerank_chain.invoke(q)
 
-    def query_with_multiqueries(self, q:str, retriever:VectorStoreRetriever) -> str:
+    def query_with_rerank_vm_sim_hybrid(
+            self,
+            q:str,
+            v_retriver:BaseRetriever,
+            bm25_retriver:BaseRetriever
+    ) -> str:
+
+        prompt = ChatPromptTemplate.from_template('''\
+            以下の文脈だけを踏まえて質問に解答してください。
+
+            文脈:"""
+            {context}
+            """
+
+            質問:"""
+            {question}
+            """
+        ''')
+
+        hybrid_chain = (
+            RunnableParallel({
+                "sim_docs": v_retriver,
+                "bm25_docs": bm25_retriver
+            }) | (lambda x:[x["sim_docs"], x["bm25_docs"]]) | self.reciprocal_rank_fusion
+        )
+        
+        rag_chain = (
+            {
+                "question": RunnablePassthrough(),
+                "context": hybrid_chain
+            } | prompt | self._llm | StrOutputParser()
+        )
+
+        return rag_chain.invoke(q)
+
+
+    def query_with_multiqueries(self, q:str, retriever:BaseRetriever) -> str:
         multi_query_gen_prompt = ChatPromptTemplate.from_template("""\
         質問に対してベクターデータベースから関連文書を検索するため３つの異なる検索クエリを生成してください。
         距離ベースの類似性検索の限界を克服するためユーザーの質問に対して複数の視点を提供するのが目的です。
