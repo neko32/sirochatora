@@ -170,8 +170,12 @@ def git_rag(sc:Sirochatora):
     gitlag.set_branch_name("master")
     gitlag.fetch(task_name)
 
-def ask_graph(sc:Sirochatora):
-    sc.graph_init()
+def ask_graph_qa(sc:Sirochatora):
+    sc.graph_init_qaflow()
+    print(sc.ask_with_graph("カモミールの効用について教えてください"))
+
+def ask_graph_simple(sc:Sirochatora):
+    sc.graph_init_simpletalk()
     print(sc.ask_with_graph("カモミールの効用について教えてください"))
 
 def main():
@@ -183,7 +187,8 @@ def main():
     #sc:Sirochatora = Sirochatora(temperature=1.)
     #sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
     sc:Sirochatora = Sirochatora(role_def_conf = "study_role.json")
-    ask_graph(sc)
+    ask_graph_simple(sc)
+    #ask_graph_qa(sc)
     #rag_rerank(sc)
     #rag_bm25(sc)
     #rag_rerank_bm25(sc)

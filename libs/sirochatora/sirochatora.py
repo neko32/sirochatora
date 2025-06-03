@@ -1,5 +1,5 @@
 from langchain_core.runnables import RunnablePassthrough, RunnableParallel, ConfigurableField
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage, BaseMessage
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -29,6 +29,11 @@ class Judgement(BaseModel):
     judge:bool = Field(default = False, description = "判定結果")
     reason:str = Field(default = "", description = "判定理由")
 
+class MessageBasedState(BaseModel):
+    query:str = Field(
+        ..., description = "ユーザーからの質問"
+    )
+    messages:Annotated[list[BaseMessage], operator.add] = Field(default = [])
 
 class State(BaseModel):
     query:str = Field(
@@ -136,8 +141,6 @@ class Sirochatora:
         回答: {answer}
         """.strip()
         )
-        parser = PydanticOutputParser(pydantic_object=Judgement)
-        #chain = prompt | self._llm | parser
         chain = prompt | self._llm.with_structured_output(Judgement) # type: ignore
         result:Judgement = chain.invoke({"query": query, "answer": ans}) # type: ignore
 
@@ -146,7 +149,32 @@ class Sirochatora:
             "judgement_reason": result.reason
         }
 
-    def graph_init(self):
+    def graph_set_system(self, _:MessageBasedState) -> dict[str, Any]:
+        msg_buf = [SystemMessage(content = "Rule1: あなたはとても賢くてかわいいねこちゃんです。")]
+        return {"messages": msg_buf}
+
+    def graph_add_msg(self, state:MessageBasedState) -> dict[str, Any]:
+        msg_buf = []
+        msg_buf.append(HumanMessage(content = state.query))
+        return {"messages": msg_buf}
+
+    def graph_llm_resp(self, state:MessageBasedState) -> dict[str, Any]:
+        ai_msg = self._llm.invoke(state.messages)
+        return {"messages": [ai_msg]}
+
+    def graph_init_simpletalk(self):
+        g = StateGraph(MessageBasedState)
+        g.add_node("set_system", self.graph_set_system)
+        g.add_node("add_message", self.graph_add_msg)
+        g.add_node("llm_response", self.graph_llm_resp)
+        g.set_entry_point("set_system")
+        g.add_edge("set_system", "add_message")
+        g.add_edge("add_message", "llm_response")
+        g.add_edge("llm_response", END)
+        self._compiled_workflow = g.compile()
+        self._is_graph_ready = True
+
+    def graph_init_qaflow(self):
         workflow = StateGraph(State)
         workflow.add_node("selection", self.graph_selection_node)
         workflow.add_node("answering", self.graph_answering_node)
