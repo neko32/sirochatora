@@ -2,6 +2,7 @@ from libs.sirochatora.sirochatora import Sirochatora
 from libs.sirochatora.rag.rag import LocalStorageRAG, TavilyRAG, RetrievalType, GithubRAG
 from libs.sirochatora.util.siroutil import ConfJsonLoader, ctxdict_to_str
 from os import environ
+import json
 
 
 def simple_q(sc:Sirochatora):
@@ -169,6 +170,10 @@ def git_rag(sc:Sirochatora):
     gitlag.set_branch_name("master")
     gitlag.fetch(task_name)
 
+def ask_graph(sc:Sirochatora):
+    sc.graph_init()
+    print(sc.ask_with_graph("カモミールの効用について教えてください"))
+
 def main():
 
     conf:ConfJsonLoader = ConfJsonLoader("sirochatora/conf.json")
@@ -176,12 +181,14 @@ def main():
     environ["LANGCHAIN_PROJECT"] = conf._conf["LANGCHAIN_PROJECT"]
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
-    sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
+    #sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
+    sc:Sirochatora = Sirochatora(role_def_conf = "study_role.json")
+    ask_graph(sc)
     #rag_rerank(sc)
     #rag_bm25(sc)
     #rag_rerank_bm25(sc)
     #rag_rerank_hybrid(sc)
-    git_rag(sc)
+    #git_rag(sc)
     #rag_multiqueries(sc)
     #rag_hyde(sc)
     #chat_sample(sc)

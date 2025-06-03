@@ -1,4 +1,4 @@
-from langchain_core.runnables import RunnablePassthrough, RunnableParallel
+from langchain_core.runnables import RunnablePassthrough, RunnableParallel, ConfigurableField
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
@@ -8,6 +8,7 @@ from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_community.retrievers import BM25Retriever
 from langchain_cohere import CohereRerank
+from langgraph.graph import StateGraph, END
 
 from langchain_openai import ChatOpenAI
 
@@ -15,12 +16,36 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import SecretStr, BaseModel, Field
 
 from libs.sirochatora.util.siroutil import from_system_message_to_tuple
-from typing import Optional, Any
+from typing import Optional, Any, Annotated
 from uuid import uuid4
-from os import getenv
+from os import getenv, environ
+import operator
+import json
 
 class QueryGenOutput(BaseModel):
     queries:list[str] = Field(...)
+
+class Judgement(BaseModel):
+    judge:bool = Field(default = False, description = "判定結果")
+    reason:str = Field(default = "", description = "判定理由")
+
+
+class State(BaseModel):
+    query:str = Field(
+        ..., description = "ユーザーからの質問"
+    )
+    current_role:str = Field(
+        default = "", description = "選定された解答ロール"
+    )
+    messages:Annotated[list[str], operator.add] = Field(
+        default = [], description = "回答履歴"
+    )
+    current_judge:bool = Field(
+        default = False, description = "品質チェックの結果"
+    )
+    judgement_reason:str = Field(
+        default = "", description = "品質チェックの判定理由"
+    )
 
 class Sirochatora:
 
@@ -28,7 +53,8 @@ class Sirochatora:
                 model_name:str = "gemma3:4b", 
                 temperature:float = 0.1,
                 is_chat_mode:bool = False,
-                session_id:Optional[str] = None):
+                session_id:Optional[str] = None,
+                role_def_conf:Optional[str] = None):
         self._model_name:str = model_name
         self._temperature = temperature
         self._system_msgs:list[SystemMessage] = [
@@ -40,6 +66,8 @@ class Sirochatora:
             temperature = self._temperature,
             base_url = 'http://localhost:11434/v1'
         )
+        self._llm = self._llm.configurable_fields(max_tokens = ConfigurableField(id = "max_tokens"))
+
         self._is_chat_mode = is_chat_mode
         if is_chat_mode:
             db_path = getenv("NEKOKAN_INDB_PATH")
@@ -49,6 +77,99 @@ class Sirochatora:
                 session_id = session_id, 
                 connection = f"sqlite:///{db_path}/sirochatora_chatv1.db")
         self._session_id = session_id
+        self._role_def_conf = role_def_conf
+        if role_def_conf is not None:
+            conf_dir = environ["NEKORC_PATH"]
+            with open(f"{conf_dir}/sirochatora/{role_def_conf}") as fp:
+                self._roles = json.load(fp)
+        self._is_graph_ready = False
+
+    def graph_selection_node(self, state: State) -> dict[str, Any]:
+        query = state.query
+        role_options = "\n".join(f"{k}. {v['name']}: {v['description']}" for k, v in self._roles.items())
+        prompt = ChatPromptTemplate.from_template(\
+            """
+            質問を分析して、最も適切な解答担当ロールを選択してください。
+
+            選択肢:
+            {role_options}
+
+            回答は選択肢の番号(1,2または3)のみを返してください。
+
+            質問: {query}
+            """.strip()
+        )
+        chain = prompt | self._llm.with_config(configurable = dict(max_tokens = 1))|StrOutputParser()
+        role_number = chain.invoke({"role_options": role_options, "query": query})
+
+        selected_role = self._roles[role_number.strip()]["name"]
+        return {"current_role": selected_role}
+
+    def graph_answering_node(self, state: State) -> dict[str, Any]:
+        query = state.query
+        role = state.current_role
+        role_details = "\n".join([f"- {v['name']}: {v['details']}" for v in self._roles.values()])
+        prompt = ChatPromptTemplate.from_template(
+        """
+        あなたは{role}として回答してください。以下の質問に対してあなたの役割に基づいた適切な回答を提供してください。
+        役割の詳細: {role_details}
+
+        質問: {query}
+
+        回答:""".strip()
+        )
+        chain = prompt | self._llm| StrOutputParser()
+        ans = chain.invoke({"role": role, "role_details": role_details, "query": query})
+        return {"messages": [ans]}
+
+    def graph_check_node(self, state:State) -> dict[str, Any]:
+        query = state.query
+        ans = state.messages[-1]
+        from langchain.output_parsers import PydanticOutputParser
+
+        prompt = ChatPromptTemplate.from_template(
+        """
+        以下の回答の品質をチェックし、問題がある場合は'False', 問題が無い場合は'True'を解答して下さい。
+        また、その判断理由も説明してください。
+
+        ユーザーからの質問: {query}
+        回答: {answer}
+        """.strip()
+        )
+        parser = PydanticOutputParser(pydantic_object=Judgement)
+        #chain = prompt | self._llm | parser
+        chain = prompt | self._llm.with_structured_output(Judgement) # type: ignore
+        result:Judgement = chain.invoke({"query": query, "answer": ans}) # type: ignore
+
+        return {
+            "current_judge": result.judge,
+            "judgement_reason": result.reason
+        }
+
+    def graph_init(self):
+        workflow = StateGraph(State)
+        workflow.add_node("selection", self.graph_selection_node)
+        workflow.add_node("answering", self.graph_answering_node)
+        workflow.add_node("check", self.graph_check_node)
+        workflow.set_entry_point("selection")
+        workflow.add_edge("selection", "answering")
+        workflow.add_edge("answering", "check")
+        workflow.add_conditional_edges(
+            "check",
+            lambda state: state.current_judge,
+            {True: END, False: "selection"}
+        )
+
+        self._compiled_workflow = workflow.compile()
+        self._is_graph_ready = True
+
+    def ask_with_graph(self, q:str) -> str:
+        if not self._is_graph_ready:
+            return "<<GRAPH NOT READY>>"
+        init_state = State(query = q)
+        rez = self._compiled_workflow.invoke(init_state)
+        print(rez)
+        return rez["messages"][-1]
 
     def change_session_id(self, new_session_id:Optional[str] = None) -> None:
         if not self._is_chat_mode:
