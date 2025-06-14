@@ -2,7 +2,7 @@ from langchain_core.runnables import RunnablePassthrough, RunnableParallel, Conf
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage, BaseMessage
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_community.chat_message_histories import SQLChatMessageHistory
@@ -15,7 +15,7 @@ from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import SecretStr, BaseModel, Field
 
-from libs.sirochatora.util.siroutil import from_system_message_to_tuple
+from sirochatora.util.siroutil import from_system_message_to_tuple
 from typing import Optional, Any, Annotated
 from uuid import uuid4
 from os import getenv, environ
@@ -33,7 +33,16 @@ class MessageBasedState(BaseModel):
     query:str = Field(
         ..., description = "ユーザーからの質問"
     )
+    current_role:str = Field(
+        default = "", description = "選定された解答ロール"
+    )
     messages:Annotated[list[BaseMessage], operator.add] = Field(default = [])
+    validation_result:bool = Field(
+        default = False, description = "品質チェックの結果"
+    )
+    validation_result_reason:str = Field(
+        default = "", description = "品質チェックの判定理由"
+    )
 
 class State(BaseModel):
     query:str = Field(
@@ -130,7 +139,6 @@ class Sirochatora:
     def graph_check_node(self, state:State) -> dict[str, Any]:
         query = state.query
         ans = state.messages[-1]
-        from langchain.output_parsers import PydanticOutputParser
 
         prompt = ChatPromptTemplate.from_template(
         """

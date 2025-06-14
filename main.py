@@ -1,6 +1,6 @@
-from libs.sirochatora.sirochatora import Sirochatora
-from libs.sirochatora.rag.rag import LocalStorageRAG, TavilyRAG, RetrievalType, GithubRAG
-from libs.sirochatora.util.siroutil import ConfJsonLoader, ctxdict_to_str
+from sirochatora.sirochatora import Sirochatora
+from sirochatora.rag.rag import LocalStorageRAG, TavilyRAG, RetrievalType, GithubRAG
+from sirochatora.util.siroutil import ConfJsonLoader, ctxdict_to_str
 from os import environ
 import json
 
@@ -186,7 +186,7 @@ def main():
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
     #sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
-    sc:Sirochatora = Sirochatora(role_def_conf = "study_role.json")
+    sc:Sirochatora = Sirochatora(model_name = "hf.co/MaziyarPanahi/gemma-7b-GGUF:Q4_K_M", role_def_conf = "study_role.json")
     ask_graph_simple(sc)
     #ask_graph_qa(sc)
     #rag_rerank(sc)

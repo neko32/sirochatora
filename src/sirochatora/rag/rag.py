@@ -18,8 +18,8 @@ from langchain_text_splitters import CharacterTextSplitter
 
 from langchain_chroma import Chroma
 
-from libs.sirochatora.sirochatora import Sirochatora
-from libs.sirochatora.util.siroutil import from_system_message_to_tuple 
+from sirochatora.sirochatora import Sirochatora
+from sirochatora.util.siroutil import from_system_message_to_tuple 
 
 class Filter(ABC):
     @abstractmethod
