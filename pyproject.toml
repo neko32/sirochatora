@@ -1,11 +1,12 @@
 [project]
 name = "sirochatora"
-version = "20250605"
+version = "20250614"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.0.10",
+    "faiss-cpu>=1.11.0",
     "gitpython>=3.1.44",
     "langchain>=0.3.25",
     "langchain-chroma>=0.2.4",

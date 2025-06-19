@@ -21,6 +21,7 @@ from uuid import uuid4
 from os import getenv, environ
 import operator
 import json
+from enum import Enum
 
 class QueryGenOutput(BaseModel):
     queries:list[str] = Field(...)
@@ -66,11 +67,13 @@ class Sirochatora:
     def __init__(self, 
                 model_name:str = "gemma3:4b", 
                 temperature:float = 0.1,
+                base_url:str = 'http://localhost:11434/v1',
                 is_chat_mode:bool = False,
                 session_id:Optional[str] = None,
                 role_def_conf:Optional[str] = None):
         self._model_name:str = model_name
         self._temperature = temperature
+        self._base_url = base_url
         self._system_msgs:list[SystemMessage] = [
             SystemMessage("Rule1: あなたはとても賢くてかわいいねこちゃんです。")
         ]
@@ -78,7 +81,7 @@ class Sirochatora:
             model = self._model_name,
             api_key = SecretStr("ollama"),
             temperature = self._temperature,
-            base_url = 'http://localhost:11434/v1'
+            base_url = self._base_url
         )
         self._llm = self._llm.configurable_fields(max_tokens = ConfigurableField(id = "max_tokens"))
 
@@ -250,6 +253,30 @@ class Sirochatora:
             return resp
         else:
             return chain.invoke({
+                "question": q
+            })
+
+    async def query_async(self, q:str) -> BaseMessage:
+        prompt = ChatPromptTemplate.from_messages([
+            from_system_message_to_tuple(self._system_msgs[-1]),
+            ("human", q)
+        ])
+        chain = prompt | self._llm
+        if self._is_chat_mode:
+            messages_from_hist = self._msg_history.get_messages()
+            resp = await chain.ainvoke({
+                "chat_history": messages_from_hist,
+                "question": q
+            })
+            self._msg_history.add_user_message(q)
+            if isinstance(resp.content, str):
+                self._msg_history.add_ai_message(resp.content)
+            else:
+                raise RuntimeError("response type not str not supported yet")
+            print(f"@query:session_id - {self._session_id}")
+            return resp
+        else:
+            return await chain.ainvoke({
                 "question": q
             })
         
@@ -522,3 +549,103 @@ class Sirochatora:
         ) | synth_prompt | self._llm | out_parser
 
         return synth_chain.invoke({"topic": q})
+
+class Sex(str, Enum):
+    Male = "male"
+    Female = "female"
+    Unknown = "unknown"
+    Neutral = "neutral"
+
+def from_sexenum_to_str(sex:Sex, lang:str = "JP"):
+    ja_map = {Sex.Male: "オス", Sex.Female: "メス"}
+    if lang == "JP":
+        return ja_map[sex]
+    else:
+        return str(sex)
+
+class ActorType(str, Enum):
+    Human = "human"
+    Cat = "cat"
+    Robot = "robot"
+
+class Pattern(str, Enum):
+    OrangeTabby = "Orange Tabby"
+    Tabby = "Tabby"
+    White = "White"
+    Black = "Black"
+    Calico = "Calico"
+
+def from_patternenum_to_str(pat:Pattern, lang:str = "JP") -> str:
+    ja_map = {
+        Pattern.Black: "黒",
+        Pattern.White: "白",
+        Pattern.Tabby: "きじとら",
+        Pattern.OrangeTabby: "ちゃとら",
+        Pattern.Calico: "みけ"
+    }
+    if lang == "JP":
+        return ja_map[pat]
+    else:
+        return str(pat)
+
+def get_characterics(name:str) -> str:
+    name_char_map = {
+        "みーこ": "あなたはかわいくて賢く、そして甘えん坊なねこちゃんです。",
+        "ぴぴん": "食欲旺盛でいつもごはんのことばかり考えているかわいいねこちゃんです。"
+    }
+    return name_char_map[name]
+
+class Actor:
+
+    def __init__(self,
+                name:str,
+                full_name:str,
+                persona_id:str,
+                image:str):
+        self._image = image
+        self._name = name
+        self._full_name = full_name
+        self._persona_id = persona_id
+
+        self._age = 5
+        self._sex = Sex.Unknown
+        self._persona_system_message = ""
+        self._pattern = Pattern.Calico
+        self._type = ActorType.Robot
+
+        self._load_persona()    
+
+    def _load_persona(self):
+        # very temporal logic just for POC
+        if self._persona_id == "meeko":
+            self._age = 5
+            self._sex = Sex.Female
+            self._type = ActorType.Cat
+            self._pattern = Pattern.Calico
+            self._persona_system_message = f"""
+            {get_characterics(self._name)}
+            名前: {self._name}
+            年齢: {self._age}
+            性別: {from_sexenum_to_str(self._sex)}
+            毛の柄: {from_patternenum_to_str(self._pattern)}
+
+            """
+        elif self._persona_id == "pipin":
+            self._age = 3
+            self._sex = Sex.Male
+            self._type = ActorType.Cat
+            self._persona_system_message = f"""
+            {get_characterics(self._name)}
+            名前: {self._name}
+            年齢: {self._age}
+            性別: {from_sexenum_to_str(self._sex)}
+            毛の柄: {from_patternenum_to_str(self._pattern)}
+
+            """
+    @property
+    def persona_system_message(self) -> str: 
+        return self._persona_system_message
+        
+        
+
+
