@@ -1,6 +1,6 @@
 [project]
 name = "sirochatora"
-version = "20250614"
+version = "20250619"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"

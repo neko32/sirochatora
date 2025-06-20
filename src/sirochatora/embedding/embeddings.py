@@ -1,6 +1,7 @@
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from langchain_text_splitters import CharacterTextSplitter
 
 from os import getenv
 from hashlib import md5
@@ -31,6 +32,8 @@ class Sima:
             persist_directory = self._persistence_dir
         )
 
+        self._text_splitter = CharacterTextSplitter(chunk_size = self._split_chunk_size, chunk_overlap = self._spilt_chunk_overlap)
+
     def add(self, doc:str, metadata:dict[str,str]) -> str:
         doc_md5 = md5(doc.encode()).hexdigest()
         doc_obj = Document(page_content = doc, metadata = metadata)
@@ -38,14 +41,24 @@ class Sima:
         return doc_md5
 
     def add_bulk(self, docs:list[str], metas:list[dict[str, str]]) -> list[str]:
-        doc_md5 = [
-            md5(doc.encode()).hexdigest() for doc in docs
-        ]
+
+        orig_docs_siz = len(docs)
+
         doc_objs = [
             Document(page_content = doc, metadata = meta)
             for doc, meta in zip(docs, metas)
         ]
+        doc_objs = self._text_splitter.split_documents(doc_objs)
+
+        post_split_docs_siz = len(doc_objs)
+        
+        doc_md5 = [
+            md5(doc.page_content.encode()).hexdigest() for doc in doc_objs
+        ]
+
         self._vstore.add_documents(documents = doc_objs, ids = doc_md5)
+
+        print(f"splitted docs from {orig_docs_siz} to {post_split_docs_siz}")
 
         return doc_md5
 
