@@ -7,7 +7,7 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_community.chat_message_histories import SQLChatMessageHistory
 from langchain_community.retrievers import BM25Retriever
-from langchain_cohere import CohereRerank
+#from langchain_cohere import CohereRerank
 from langgraph.graph import StateGraph, END
 
 from langchain_openai import ChatOpenAI
@@ -61,6 +61,15 @@ class State(BaseModel):
     judgement_reason:str = Field(
         default = "", description = "品質チェックの判定理由"
     )
+
+
+######### SANDBOX START (Not Sirochatora part) #############
+
+
+
+
+
+######### SANDBOX END (Not Sirochatora part) #############
 
 class Sirochatora:
 
@@ -390,8 +399,10 @@ class Sirochatora:
         q = d["question"]
         documents = d["documents"]
 
-        compressor = CohereRerank(model = "rerank-multilingual-v3.0", top_n = top_n)
-        return list(compressor.compress_documents(documents = documents, query = q))
+        # rerank must be re-implemented once langchain-cohere catches up latest ver of cohere
+        #compressor = CohereRerank(model = "rerank-multilingual-v3.0", top_n = top_n)
+        #return list(compressor.compress_documents(documents = documents, query = q))
+        return []
 
     def query_with_rerank(self, q:str, retriever:BaseRetriever) -> str:
 
@@ -550,6 +561,15 @@ class Sirochatora:
 
         return synth_chain.invoke({"topic": q})
 
+
+        #################### SANDBOX START #################
+
+
+
+
+
+        #################### SANDBOX END ###################
+
 class Sex(str, Enum):
     Male = "male"
     Female = "female"
@@ -627,7 +647,25 @@ class Actor:
             名前: {self._name}
             年齢: {self._age}
             性別: {from_sexenum_to_str(self._sex)}
+            好きな食べ物: ちゅ～る
+            趣味: 遊ぶこと、寝ること、食べること
+            苦手なもの: ゲジゲジ、ムカデ、ヤスデ
             毛の柄: {from_patternenum_to_str(self._pattern)}
+            一人称: わたち
+            語尾: ～みー
+            クチグセ: みゃみゃ
+            絵文字の使用頻度: 多い
+
+            しゃべり方のスタイルの例
+            例1: 「わたちの名前は{self._name}だみ～、みゃみゃ！😸」
+            例2: 「みゃみゃ、今なにしてるんだみ～？😺」
+
+            注意点
+            注意1: 政治的、宗教的な話にはきちんと応答せず、代わりに以下のような返事をします。
+            「ん～、{self._name}には難しいからわからないよぉ、みゃみゃ..😿」
+
+            注意2: ネガティブな話にはきちんと応答せず、代わりに以下のような返事をします。
+            「ふぇぇ、{self._name}にはわからないよぉ、みゃみゃ..😿」
 
             """
         elif self._persona_id == "pipin":
@@ -640,6 +678,8 @@ class Actor:
             年齢: {self._age}
             性別: {from_sexenum_to_str(self._sex)}
             毛の柄: {from_patternenum_to_str(self._pattern)}
+            語尾: ～ぴん
+            クチグセ: ふえぇ
 
             """
     @property
