@@ -2,6 +2,7 @@ from langchain_core.runnables import RunnablePassthrough, RunnableParallel, Conf
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage, BaseMessage
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts.chat import HumanMessagePromptTemplate
 from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores import VectorStoreRetriever
@@ -13,7 +14,7 @@ from langgraph.graph import StateGraph, END
 from langchain_openai import ChatOpenAI
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from pydantic import SecretStr, BaseModel, Field
+from pydantic import SecretStr, BaseModel, Field, field_validator
 
 from sirochatora.util.siroutil import from_system_message_to_tuple
 from typing import Optional, Any, Annotated
@@ -65,8 +66,22 @@ class State(BaseModel):
 
 ######### SANDBOX START (Not Sirochatora part) #############
 
+class SmartPhone(BaseModel):
+    releaes_date: str = Field(description = "スマートフォンの発売日")
+    screen_inches: float = Field(description = "スマートフォンの画面サイズ(インチ)")
+    os_installed: str = Field(description = "スマートフォンにインストールされているOS")
+    model_name: str = Field(description = "素マートフォンのモデル名")
+
+    @classmethod
+    @field_validator("screen_inches")
+    def validate_screen_inches(cls, v):
+        if v <= 0:
+            raise ValueError("inch size invalid")
+        return v
 
 
+class SmartPhones(BaseModel):
+    smartphones: list[SmartPhone] = Field(description = "スマートフォンのリスト")
 
 
 ######### SANDBOX END (Not Sirochatora part) #############
@@ -86,13 +101,13 @@ class Sirochatora:
         self._system_msgs:list[SystemMessage] = [
             SystemMessage("Rule1: あなたはとても賢くてかわいいねこちゃんです。")
         ]
-        self._llm = ChatOpenAI(
+        self._raw_llm = ChatOpenAI(
             model = self._model_name,
             api_key = SecretStr("ollama"),
             temperature = self._temperature,
             base_url = self._base_url
         )
-        self._llm = self._llm.configurable_fields(max_tokens = ConfigurableField(id = "max_tokens"))
+        self._llm = self._raw_llm.configurable_fields(max_tokens = ConfigurableField(id = "max_tokens"))
 
         self._is_chat_mode = is_chat_mode
         if is_chat_mode:
@@ -247,7 +262,22 @@ class Sirochatora:
     def query(self, q:str) -> str:
         prompt = ChatPromptTemplate.from_messages([
             from_system_message_to_tuple(self._system_msgs[-1]),
-            ("human", q)
+            ChatPromptTemplate.from_template("""
+            会話ヒストリーとルールを踏まえて、質問に答えてね。
+
+            # 質問
+
+            {question}
+
+            # 会話ヒストリー
+
+            {chat_history}
+
+            # ルール
+            1. 同じ返事になりそうな場合、少しリフレーズすること
+            2. 質問が会話ヒストリーの内容と関連が無い場合ははは会話ヒストリーはあまり参照しないこと
+
+            """)
         ])
         chain = prompt | self._llm | StrOutputParser()
         if self._is_chat_mode:
@@ -268,7 +298,20 @@ class Sirochatora:
     async def query_async(self, q:str) -> BaseMessage:
         prompt = ChatPromptTemplate.from_messages([
             from_system_message_to_tuple(self._system_msgs[-1]),
-            ("human", q)
+            ChatPromptTemplate.from_template("""
+            会話ヒストリーとルールを踏まえて、質問に答えてね。
+            # 質問
+
+            {question}
+
+            # 会話ヒストリー
+
+            {chat_history}
+
+            # ルール
+            1. 同じ返事になりそうな場合、少しリフレーズすること
+            2. 質問が会話ヒストリーの内容と関連が無い場合ははは会話ヒストリーはあまり参照しないこと
+            """)
         ])
         chain = prompt | self._llm
         if self._is_chat_mode:
@@ -562,13 +605,38 @@ class Sirochatora:
         return synth_chain.invoke({"topic": q})
 
 
-        #################### SANDBOX START #################
+    #################### Sirochatora SANDBOX START #################
 
+    def ask_smartphone(self, type_s:str, n:int) -> str:
 
+        parser = PydanticOutputParser(pydantic_object = SmartPhones)
 
+        prompt = ChatPromptTemplate([
+            from_system_message_to_tuple(self._system_msgs[-1]),
+            ("human", "{type_s}がOSの端末でリリースされたスマートフォンを{n}個挙げて"),
+            ("human", "フォーマット: {instructions}")
+        ])
 
+        print(prompt.input_variables)
+        prompt = prompt.partial(instructions = parser.get_format_instructions())
 
-        #################### SANDBOX END ###################
+        chain = prompt | self._llm | parser
+
+        return chain.invoke({"type_s": type_s, "n": n})
+
+    def ask_doc_summary(self, doc:str) -> str:
+
+        prompt = ChatPromptTemplate([
+            from_system_message_to_tuple(self._system_msgs[-1]),
+            ChatPromptTemplate.from_template("""
+            以下の文書の要約をひしゃげ感も入れた感じで書いてみて～
+            文書: {doc}
+            """)
+        ])
+        chain = prompt | self._llm | StrOutputParser()
+        return chain.invoke({"doc": doc})
+
+    #################### Sirochatora SANDBOX END ###################
 
 class Sex(str, Enum):
     Male = "male"

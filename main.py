@@ -186,8 +186,10 @@ def main():
 
     #sc:Sirochatora = Sirochatora(temperature=1.)
     #sc:Sirochatora = Sirochatora(temperature=0., is_chat_mode=True)
-    sc:Sirochatora = Sirochatora(model_name = "hf.co/MaziyarPanahi/gemma-7b-GGUF:Q4_K_M", role_def_conf = "study_role.json")
-    ask_graph_simple(sc)
+    #sc:Sirochatora = Sirochatora(model_name = "hf.co/MaziyarPanahi/gemma-7b-GGUF:Q4_K_M", role_def_conf = "study_role.json")
+    #ask_graph_simple(sc)
+    sc:Sirochatora = Sirochatora(temperature = 0.3)
+    print(sc.ask_smartphone("iPhone", 3))
     #ask_graph_qa(sc)
     #rag_rerank(sc)
     #rag_bm25(sc)
